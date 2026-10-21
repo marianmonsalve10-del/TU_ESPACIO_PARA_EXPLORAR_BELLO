@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoVisor de Bello | Área de expansión</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="layers-sidebar" aria-label="Controles del geovisor">
+            <div class="brand sidebar-brand">
+                <div class="brand-mark">G</div>
+                <div>
+                    <h1>GeoVisor de Bello</h1>
+                    <p>Área de expansión y capas del territorio</p>
+                </div>
+            </div>
+            <form id="placeSearchForm" class="place-search" role="search">
+                <label for="placeSearchInput">Buscar un barrio o una dirección</label>
+                <div class="place-search-row">
+                    <input id="placeSearchInput" type="search" minlength="3" maxlength="120" placeholder="Ej.: París, Bello" autocomplete="off" required>
+                    <button type="submit" class="place-search-button">Buscar</button>
+                </div>
+                <small>La búsqueda se envía a OpenStreetMap. Datos © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>.</small>
+                <p id="placeSearchStatus" class="place-search-status" role="status" aria-live="polite"></p>
+                <div id="placeSearchResults" class="place-search-results"></div>
+                <details class="search-provider-settings">
+                    <summary>Cambiar proveedor de búsqueda</summary>
+                    <label for="geocoderEndpoint">Servicio compatible con Nominatim</label>
+                    <input id="geocoderEndpoint" type="url" placeholder="https://…/search">
+                    <button id="saveGeocoderEndpoint" type="button" class="provider-save-button">Guardar proveedor</button>
+                </details>
+            </form>
+            <div class="toolbar-actions sidebar-actions">
+                <button id="resetViewBtn" class="primary-btn" type="button">Reiniciar vista</button>
+            </div>
+            <div class="sidebar-header">
+                <h3>Controles del mapa</h3>
+                <button id="openGuideBtn" class="guide-link" type="button">Guía rápida</button>
+            </div>
+            <details class="basemap-section" open>
+                <summary id="basemapHeading">Mapa base</summary>
+                <p class="section-note">Cambia el estilo del mapa: calles, satélite o esquema.</p>
+                <div id="basemapList" class="basemap-list"></div>
+            </details>
+            <details class="measure-section">
+                <summary>Medir en el mapa</summary>
+                <p class="section-note">Traza sobre el mapa y termina con doble clic.</p>
+                <div class="measure-actions">
+                    <button id="measureDistanceBtn" type="button">Medir distancia</button>
+                    <button id="measureAreaBtn" type="button">Medir área</button>
+                </div>
+                <div class="measure-units">
+                    <label>Unidad de distancia<select id="measureDistanceUnit"><option value="m">Metros (m)</option><option value="km">Kilómetros (km)</option><option value="mi">Millas (mi)</option></select></label>
+                    <label>Unidad de área<select id="measureAreaUnit"><option value="m2">Metros cuadrados (m²)</option><option value="ha">Hectáreas (ha)</option><option value="km2">Kilómetros cuadrados (km²)</option><option value="ac">Acres (ac)</option></select></label>
+                </div>
+                <p id="measureMessage" class="measure-message" role="status" aria-live="polite">Elige una medición para comenzar.</p>
+            </details>
+            <details class="layer-section" open>
+                <summary>Capas</summary>
+                <p class="section-note">Activa una capa para verla en el mapa. Usa el botón de tabla para consultar sus datos.</p>
+                <label class="layer-search">
+                    <span class="visually-hidden">Buscar una capa</span>
+                    <input id="layerSearch" type="search" placeholder="Buscar capas…" autocomplete="off" aria-controls="layerList">
+                </label>
+                <div class="layer-summary" aria-live="polite">
+                    <span id="layerCount">0 capas</span>
+                    <span id="activeLayerCount">0 activas</span>
+                </div>
+                <div id="layerList" class="layer-list"></div>
+            </details>
+            <details class="analysis-section">
+                <summary>Análisis espacial</summary>
+                <p id="analysisMessage" class="analysis-message" role="status" aria-live="polite">Selecciona una herramienta para comenzar.</p>
+                <div class="analysis-tool">
+                    <h4>Área de influencia (buffer)</h4>
+                    <label>Capa de entrada<select id="bufferLayer"></select></label>
+                    <div class="analysis-inline"><label>Distancia<input id="bufferDistance" type="number" min="0.01" step="any" value="100"></label><label>Unidad<select id="bufferUnit"><option value="meters">Metros</option><option value="kilometers">Kilómetros</option></select></label></div>
+                    <label>Disolución<select id="bufferDissolve"><option value="separate">Mantener separados</option><option value="dissolve">Disolver todos</option></select></label>
+                    <button id="runBuffer" class="analysis-button" type="button">Crear área de influencia</button>
+                </div>
+                <div class="analysis-tool">
+                    <h4>Clasificación temática</h4>
+                    <label>Capa<select id="classLayer"></select></label>
+                    <label>Campo<select id="classField"></select></label>
+                    <label>Método<select id="classMethod"><option value="unique">Valores únicos</option><option value="equal">Intervalos iguales</option><option value="quantile">Cuantiles</option></select></label>
+                    <label>Número de clases<input id="classCount" type="number" min="2" max="12" value="5"></label>
+                    <small>Los valores únicos usan colores distintos; los datos numéricos usan una escala gradual de menor a mayor.</small>
+                    <button id="applyClassification" class="analysis-button" type="button">Aplicar clasificación</button>
+                    <div id="classificationLegend" class="classification-legend" aria-live="polite"></div>
+                </div>
+            </details>
+            <div class="toolbar-actions sidebar-actions drawing-actions">
+                <button id="drawPolygonBtn" class="primary-btn alt" type="button">Crear polígono</button>
+                <button id="clearPolygonsBtn" class="primary-btn clear-btn" type="button" disabled>Borrar dibujos</button>
+            </div>
+        </aside>
+
+        <div id="map" aria-label="Mapa geográfico"></div>
+        <details id="mapLegend" class="map-legend" open>
+            <summary>Leyenda del mapa</summary>
+            <div id="mapLegendContent" class="map-legend-content" aria-live="polite"></div>
+        </details>
+    </div>
+
+    <div id="welcomeModal" class="welcome-modal" hidden role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
+        <section class="welcome-dialog">
+            <div id="welcomeStep" class="welcome-step">
+            <div class="welcome-mark" aria-hidden="true">G</div>
+            <p class="welcome-kicker">TU ESPACIO PARA EXPLORAR BELLO</p>
+            <h2 id="welcomeTitle" class="welcome-title">BIENVENIDO</h2>
+            <p class="welcome-subtitle">Explora el territorio de Bello</p>
+            <button id="showGuideBtn" class="welcome-start" type="button">Continuar</button>
+            </div>
+            <div id="guideStep" class="guide-step" hidden>
+            <p class="welcome-kicker">GUÍA RÁPIDA</p>
+            <h2>Funciones del geovisor</h2>
+            <p class="welcome-intro">Así puedes explorar y consultar el territorio:</p>
+            <div class="welcome-guides">
+                <article><span class="welcome-icon" aria-hidden="true">▧</span><div><h3>Elige cómo verlo</h3><p>En “Mapa base”, selecciona calles, satélite o esquema. Acércate y aléjate con la rueda del ratón o los botones + y −.</p></div></article>
+                <article><span class="welcome-icon" aria-hidden="true">◉</span><div><h3>Explora las capas</h3><p>Abre “Capas”, busca una por su nombre y actívala. Haz clic en un elemento del mapa para ver sus datos; usa el botón de tabla de la capa para consultar sus registros.</p></div></article>
+                <article><span class="welcome-icon" aria-hidden="true">⌖</span><div><h3>Dibuja y borra polígonos</h3><p>Pulsa “Crear polígono” y marca los vértices con clics; cierra la figura haciendo clic en el primer punto o doble clic. Pulsa de nuevo el botón para cancelar. “Borrar dibujos” elimina los polígonos y mediciones del mapa.</p></div></article>
+                <article><span class="welcome-icon" aria-hidden="true">⌕</span><div><h3>Busca un lugar</h3><p>Escribe el nombre de un barrio o una dirección en el buscador y pulsa “Buscar”. Elige un resultado para centrar el mapa en ese sitio. La búsqueda necesita conexión a internet.</p></div></article>
+                <article><span class="welcome-icon" aria-hidden="true">↔</span><div><h3>Mide distancias y áreas</h3><p>Abre “Medir en el mapa”, elige distancia o área, marca los puntos y termina con doble clic. El resultado queda dibujado sobre el mapa; “Borrar dibujos” lo quita.</p></div></article>
+                <article><span class="welcome-icon" aria-hidden="true">⌖</span><div><h3>Ubícate y consulta</h3><p>La escala aparece en la esquina inferior izquierda. Mueve el cursor sobre el mapa para leer las coordenadas. Haz clic en una entidad de una capa activa para abrir su ficha.</p></div></article>
+                <article><span class="welcome-icon" aria-hidden="true">↺</span><div><h3>Vuelve a la vista inicial</h3><p>“Reiniciar vista” regresa al encuadre general de Bello y “Leyenda del mapa” explica los colores de las capas visibles.</p></div></article>
+            </div>
+            <button id="closeWelcomeBtn" class="welcome-start" type="button">Empezar a explorar</button>
+            </div>
+        </section>
+    </div>
+
+    <div id="attributeTableModal" class="attribute-modal" hidden role="dialog" aria-modal="true" aria-labelledby="attributeTableTitle">
+        <section class="attribute-dialog">
+            <header class="attribute-dialog-header">
+                <h2 id="attributeTableTitle">Tabla de atributos</h2>
+                <button id="closeAttributeTable" class="attribute-close" type="button" aria-label="Cerrar tabla">×</button>
+            </header>
+            <div id="attributeTableContent" class="attribute-table-content"></div>
+        </section>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://unpkg.com/shpjs@6.2.0/dist/shp.js"></script>
+    <script src="https://unpkg.com/@mapbox/shp-write@0.3.2/shpwrite.js"></script>
+    <script src="https://calvinmetcalf.github.io/leaflet.shapefile/leaflet.shpfile.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="scripts.js"></script>
+</body>
+</html>
